@@ -26,14 +26,15 @@ end
 
 local ports = function (path)
 	if path == nil then path = '/usr/ports' end
-	local exclude = {'.svn', '.git', 'distfiles', 'packages', 'INDEX*', 'work'}
+	local exclude = {'.svn', '.git', 'distfiles', 'packages', 'INDEX?*', 'work'}
 	local rep = repeat_opt('--exclude', exclude)
 	return 0 == os.execute(tar_xz..'L ports.txz'..cmd..path)
 end
 
 local kernel = function (path)
+	
 	if path == nil then path = '/boot/kernel' end
-	return 0 == os.execute(tar_xz..' kernel.txz --exclude *.debug '..path)
+	return 0 == os.execute(tar_xz..' kernel.txz --exclude ?*.debug '..path)
 end
 
 local base = function (path)
@@ -44,13 +45,18 @@ local base = function (path)
 	}
 	local exclude = {
 		'dev/?*', 'dev/.?*', 'media/?*', 'media/.?*', 'mnt/?*', 'mnt/.?*', 'net/?*',
-		'net/.?*', 'proc/?*', 'proc/.?*', 'tmp/?*', 'tmp/.?*', 'usr/src/?*',
-		'usr/src/.?*', 'usr/obj/?*', 'usr/obj/.?*','usr/lib32/?*', 'usr/lib32/.?*',
-		'usr/local/?*', 'usr/local/.?*', 'var/[!y]*/?*', 'var/y[!p]*/?*' -- don't exclude contents of /var/yp 
+		'net/.?*', 'proc/?*', 'proc/.?*', 'tmp/?*', 'tmp/.?*', 'usr/ports',
+		'boot/kernel/?*', 'boot/kernel/.?*', 'usr/src/?*', 'usr/src/.?*', 'usr/obj/?*',
+		'usr/obj/.?*', 'usr/lib32/?*', 'usr/lib32/.?*', 'usr/local/?*', 'usr/local/.?*',
+		-- don't exclude (most of) the contents of /var/yp and /var/db/
+		'var/[!yd]*/?*', 'var/[yd][!pb]*/?*', 'var/[!yd]*/.?*', 'var/[yd][!pb]*/.?*',
+		-- but do exclude stuff in /var/db/pkg and /var/db/entropy
+		'var/db/pkg/?*', 'var/db/pkg/.?*', 'var/db/entropy/?*', 'var/db/entropy/.?*',
+		'var/db/ports/?*', 'var/db/ports/.?*'
 	}
 	local inc_opts = repeat_opt('--include', include)
 	local exc_opts = repeat_opt('--exclude', exclude)
-	local cmd = tar_xz..' base.txz'..inc_opts..exc_opts..path..'*'
+	local cmd = tar_xz..' base.txz'..inc_opts..exc_opts..path..'?*'
 	print(cmd)
 	print(os.execute(cmd))
 end
