@@ -1,6 +1,16 @@
 #!/bin/sh
 
-# usage: ./pkgdist.sh <file>|src|tests|ports|kernel|base
+# usage: ./pkgdist.sh <option>
+# <option> is one of:
+#   - src
+#   - tests
+#   - ports
+#   - base
+#   - base-dbg
+#   - kernel
+#   - kernels-dbg
+#   - minimal
+#   - minimal-dbg
 
 tar_xz="tar -cvJf"
 code=0
@@ -9,20 +19,16 @@ input_name="${1}"
 get_files() {
 	temp="${1}"; shift
 	package="${1}"; shift
-	pkglist="${1}" || pkglist=""; shift
-	skip_first="${1}" || skip_first=""
+	pkglist="${1}"; shift
+	skip_first="${1}"
 	for dep in $(pkg info -dq "${package}*"); do
-		new=0
 		for old_dep in ${pkglist}; do
 			if [ "${old_dep}" = "${dep}" ]; then
-				new=1
-				break
+				continue 2
 			fi
 		done
-		if [ "${new}" -eq 0 ]; then
-			pkglist="${pkglist} ${dep}"
-			get_files "${temp}" "${dep}" "${pkglist}"
-		fi
+		pkglist="${pkglist} ${dep}"
+		get_files "${temp}" "${dep}" "${pkglist}"
 	done
 	if [ "${skip_first}" != "skip" ]; then
 		pkg list "${package}" >> "${temp}"
@@ -30,18 +36,11 @@ get_files() {
 }
 
 case ${input_name} in
-	src)
+	src|lib32|base-dbg|kernels-dbg|minimal|minimal-dbg)
 		temp=$(mktemp) || exit 1
-		get_files "${temp}" FreeBSD-set-src
-		${tar_xz} src.txz -LT "${temp}"
+		get_files "${temp}" "FreeBSD-set-${input_name}"
+		${tar_xz} "${input_name}.txz" -LT "${temp}"
 		code=$?
-		rm "${temp}"
-		;;
-	tests)
-		temp=$(mktemp) || exit 1
-		get_files "${temp}" FreeBSD-tests
-		${tar_xz} tests.txz -LT "${temp}"
-		code=${?}
 		rm "${temp}"
 		;;
 	ports)
@@ -68,13 +67,20 @@ case ${input_name} in
 		rm "${temp}"
 		;;
 	*)
-		# code that would install the pkg to a temp folder and package that
-		# currently does not work
+		# code that would install the pkg to a temp folder and package that.
+		# currently does not work.
 		
 		#tempdir=$(mktemp -d) || exit 1
-		#pkg -o INSTALL_AS_USER=true --rootdir "${tempdir}" install "${input_name}"
 		#curdir=$(pwd)
-		#cd "${tempdir}" && find . | sed 1d | ${tar_xz} ${curdir}/${input%pkg}txz -T -
+		#cd ${tempdir}
+		#mkdir -p usr/share/keys
+		#for p in /usr/share/keys/pkg*; do
+		#	ln -s ${p} usr/share/keys
+		#done
+		#pkg -r . update
+		#pkg -r . add "${curdir}/${input_name}"
+		#rm -r usr/share/keys var/db/pkg/* var/db/pkg/.*
+		#find . | sed 1d | ${tar_xz} ${curdir}/${input_name%pkg}txz -T -
 		#cd "${curdir}" && rm -r "${tempdir}"
 
 		# extract contents
@@ -100,7 +106,7 @@ case ${input_name} in
 		temp=$(mktemp) || exit 1
 		# skip getting the files of the main package
 		# since those would have been in the .pkg
-		get_files "${temp}" "${pkg_name}" skip
+		get_files "${temp}" "${pkg_name}" "" skip
 		tar -rvf "${pkg_name}.tar" -T "${temp}"
 		rm "${temp}"
 		xz -vT0 "${pkg_name}.tar"
