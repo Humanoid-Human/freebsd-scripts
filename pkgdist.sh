@@ -2,15 +2,17 @@
 
 # usage: ./pkgdist.sh <option>
 # <option> is one of:
-#   - src
-#   - tests
-#   - ports
-#   - base
-#   - base-dbg
-#   - kernel
-#   - kernels-dbg
-#   - minimal
-#   - minimal-dbg
+# 	- a pkg file, with all dependencies in the same location
+# 		(can be local, http://, https://, or ftp://)
+#   - 'src'
+#   - 'tests'
+#   - 'ports'
+#   - 'base'
+#   - 'base-dbg'
+#   - 'kernel'
+#   - 'kernels-dbg'
+#   - 'minimal'
+#   - 'minimal-dbg'
 
 tar_xz="tar -cvJf"
 code=0
@@ -39,10 +41,11 @@ case ${input_name} in
 	src|lib32|base-dbg|kernels-dbg|minimal|minimal-dbg)
 		temp=$(mktemp) || exit 1
 		get_files "${temp}" "FreeBSD-set-${input_name}"
-		${tar_xz} "${input_name}.txz" -LT "${temp}"
+		${tar_xz} "${input_name}.txz" -nLT "${temp}"
 		code=$?
 		rm "${temp}"
 		;;
+
 	ports)
 		${tar_xz} ports.txz -L \
 		--exclude .svn --exclude .git --exclude distfiles \
@@ -50,6 +53,7 @@ case ${input_name} in
 		/usr/ports
 		code=$?
 		;;
+
 	kernel)
 		kern=$(pkg info -x FreeBSD-kernel | head -n 1)
 		echo Making dist set from "${kern}"
@@ -59,6 +63,7 @@ case ${input_name} in
 		code=$?
 		rm "${temp}"
 		;;
+
 	base)
 		temp=$(mktemp) || exit 1
 		get_files "${temp}" FreeBSD-set-base
@@ -66,51 +71,23 @@ case ${input_name} in
 		code=$?
 		rm "${temp}"
 		;;
-	*)
-		# code that would install the pkg to a temp folder and package that.
-		# currently does not work.
-		
-		#tempdir=$(mktemp -d) || exit 1
-		#curdir=$(pwd)
-		#cd ${tempdir}
-		#mkdir -p usr/share/keys
-		#for p in /usr/share/keys/pkg*; do
-		#	ln -s ${p} usr/share/keys
-		#done
-		#pkg -r . update
-		#pkg -r . add "${curdir}/${input_name}"
-		#rm -r usr/share/keys var/db/pkg/* var/db/pkg/.*
-		#find . | sed 1d | ${tar_xz} ${curdir}/${input_name%pkg}txz -T -
-		#cd "${curdir}" && rm -r "${tempdir}"
 
-		# extract contents
+	*)
+		# install the pkg to a temp folder and package that.
 		tempdir=$(mktemp -d) || exit 1
-		tar -xf "${input_name}" -C "${tempdir}"
-		curr=$(pwd)
+		curdir=$(pwd)
 		cd "${tempdir}" || exit 1
-		# get name of pkg and prefix from +MANIFEST
-		pkg_name=$(grep -E -o "\"name\":\"[^\"]+" +MANIFEST | cut -c 9-)
-		prefix=$(grep -E -o "\"prefix\":\"[^\"]+" +MANIFEST | cut -c 11-)
-		if [ "${prefix}" != "/" ]; then
-			# prefix is assumed to be an absolute path
-			# so these end up as ./path/to/prefix
-			mkdir -p ".${prefix}" 
-			mv ./* ".${prefix}"
-			mv ./.* ".${prefix}"
-		fi
-		rm +MANIFEST +COMPACT_MANIFEST
-		# tar the files into an uncompressed archive (sed skips the . entry)
-		find . | sed 1d | tar -cvf "${curr}/${pkg_name}.tar" -T -
-		cd "${curr}" && rm -r "${tempdir}" || exit 1
-		# do the normal steps of gathering dependency files
-		temp=$(mktemp) || exit 1
-		# skip getting the files of the main package
-		# since those would have been in the .pkg
-		get_files "${temp}" "${pkg_name}" "" skip
-		tar -rvf "${pkg_name}.tar" -T "${temp}"
-		rm "${temp}"
-		xz -vT0 "${pkg_name}.tar"
-		mv "${pkg_name}.tar.xz" "${pkg_name}.txz"
+		INSTALL_AS_USER=true ASSUME_ALWAYS_YES=true pkg -r . add "${curdir}/${input_name}"
+
+		# remove the pkg-generated files
+		rm -r ./var/db/pkg/* ./var/db/pkg/.[!.]*
+		[ -n "$(ls -A ./var/db/pkg || :)" ] || rm -r ./var/db/pkg
+		[ -n "$(ls -A ./var/db || :)" ] || rm -r ./var/db
+		[ -n "$(ls -A ./var || :)" ] || rm -r ./var
+		
+		# make tarball
+		find . | sed 1d | ${tar_xz} "${curdir}/${input_name%pkg}txz" -nT -
+		cd "${curdir}" && rm -r "${tempdir}"
 		;;
 esac
 
